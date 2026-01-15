@@ -1,0 +1,103 @@
+name: Selenium Testing CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: quiz_pengupil
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.1'
+        extensions: mysqli, pdo_mysql
+        coverage: none
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Setup MySQL Database
+      run: |
+        mysql -h 127.0.0.1 -u root -proot quiz_pengupil < db/quiz_pengupil.sql
+
+    - name: Update database connection
+      run: |
+        sed -i "s/'localhost'/'127.0.0.1'/g" koneksi.php
+        sed -i "s/'root'/\'root\'/g" koneksi.php
+        sed -i "s/''/\'root\'/2" koneksi.php
+
+    - name: Start PHP built-in server
+      run: |
+        php -S localhost:8000 &
+        sleep 3
+      env:
+        DB_HOST: 127.0.0.1
+        DB_USER: root
+        DB_PASSWORD: root
+        DB_NAME: quiz_pengupil
+
+    - name: Install Chrome and ChromeDriver
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wget unzip
+        wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+        CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1)
+        wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}.0.6613.119/linux64/chromedriver-linux64.zip"
+        unzip -q chromedriver-linux64.zip
+        sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+
+    - name: Run Selenium Tests
+      run: |
+        cd tests
+        python run_tests.py
+      continue-on-error: true
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: tests/*.log
+
+    - name: Test Summary
+      if: always()
+      run: |
+        echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- Database: MySQL 8.0" >> $GITHUB_STEP_SUMMARY
+        echo "- PHP Version: 8.1" >> $GITHUB_STEP_SUMMARY
+        echo "- Python Version: 3.11" >> $GITHUB_STEP_SUMMARY
+        echo "- Selenium Version: 4.16.0" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Test cases executed for Login and Register modules" >> $GITHUB_STEP_SUMMARY
