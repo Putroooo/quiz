@@ -10,7 +10,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 import time
+import os
 
 
 class TestLogin(unittest.TestCase):
@@ -26,8 +28,12 @@ class TestLogin(unittest.TestCase):
         chrome_options.add_argument('--disable-gpu')
         chrome_options.add_argument('--window-size=1920,1080')
         
-        cls.driver = webdriver.Chrome(options=chrome_options)
-        cls.base_url = "http://localhost/login.php"
+        # Use webdriver-manager to handle driver installation
+        service = Service(ChromeDriverManager().install())
+        cls.driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        # Get base URL from environment or use default
+        cls.base_url = os.environ.get('BASE_URL', 'http://localhost:8000') + "/login.php"
         cls.driver.implicitly_wait(10)
     
     def setUp(self):
